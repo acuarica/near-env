@@ -3,6 +3,12 @@ name = "near-env"
 version = "0.1.0"
 authors = ["Luis Mastrangelo <luismastrangelo@gmail.com>"]
 edition = "2018"
+categories = ["near"]
+repository = "https://github.com/acuarica/near-env"
+homepage = "https://github.com/acuarica/near-env"
+description = """
+NEAR env log macro
+"""
 
 [lib]
 proc-macro = true
