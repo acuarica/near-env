@@ -4,21 +4,31 @@ use quote::quote;
 use quote::ToTokens;
 use std::ops::Deref;
 use std::{fmt::Write, ops::DerefMut};
-use syn::{self, Attribute, Block, FnArg, ImplItem, ItemFn, ItemImpl, Pat, Signature};
+use syn::{self, Attribute, Block, FnArg, ImplItem, ItemFn, ItemImpl, Pat, Signature, Visibility};
 
 #[proc_macro_attribute]
-pub fn near_envlog(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr_args = attr.to_string();
+    let should_skip_args = attr_args.contains("skip_args");
+    let should_only_pub = attr_args.contains("only_pub");
+
     if let Ok(mut input) = syn::parse::<ItemFn>(item.clone()) {
         make_loggable_fn(
             &input.sig,
             input.block.deref_mut(),
-            !skip_args(&input.attrs),
+            !should_skip_args && !skip_args(&input.attrs),
         );
         (quote! { #input }).into()
     } else if let Ok(mut input) = syn::parse::<ItemImpl>(item) {
         for impl_item in input.items.iter_mut() {
             if let ImplItem::Method(method) = impl_item {
-                make_loggable_fn(&method.sig, &mut method.block, !skip_args(&method.attrs));
+                if !should_only_pub || is_public(&method.vis) {
+                    make_loggable_fn(
+                        &method.sig,
+                        &mut method.block,
+                        !should_skip_args && !skip_args(&method.attrs),
+                    );
+                }
             }
         }
         (quote! { #input }).into()
@@ -59,7 +69,7 @@ fn make_loggable_fn(sig: &Signature, block: &mut Block, with_args: bool) {
                         if !log_args.is_empty() {
                             write!(log_args, ", ").unwrap();
                         }
-                        write!(log_args, "{}: `{{}}`", arg_ident.to_string()).unwrap();
+                        write!(log_args, "{}: {{}}", arg_ident.to_string()).unwrap();
                     }
                 }
             }
@@ -67,26 +77,23 @@ fn make_loggable_fn(sig: &Signature, block: &mut Block, with_args: bool) {
         write!(log_str, "({})", log_args).unwrap();
     }
 
-    let env_log = quote! { ::near_sdk::env::log };
-    let env_pred = quote! { ::near_sdk::env::predecessor_account_id };
+    let env_log = quote! { near_sdk::env::log };
+    let env_pred = quote! { near_sdk::env::predecessor_account_id };
 
     let log_stmt = if is_mut {
-        write!(log_str, " pred: `{{}}`").unwrap();
+        write!(log_str, " pred: {{}}").unwrap();
         if args.is_empty() {
             quote! {
                 #env_log(format!(#log_str, #env_pred()).as_bytes());
-                // println!(#log_str, "<pred>");
             }
         } else {
             quote! {
                 #env_log(format!(#log_str, #(#args),*, #env_pred()).as_bytes());
-                // println!(#log_str, #(#args),*, "<pred>");
             }
         }
     } else {
         quote! {
             #env_log(format!(#log_str, #(#args),*).as_bytes());
-            // println!(#log_str, #(#args),*);
         }
     };
 
@@ -108,4 +115,11 @@ fn skip_args(attrs: &Vec<Attribute>) -> bool {
     }
 
     false
+}
+
+fn is_public(vis: &Visibility) -> bool {
+    match vis {
+        Visibility::Public(_) => true,
+        _ => false,
+    }
 }
