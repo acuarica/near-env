@@ -8,7 +8,7 @@ categories = ["wasm"]
 repository = "https://github.com/acuarica/near-env"
 homepage = "https://github.com/acuarica/near-env"
 description = """
-NEAR env log macro
+Unofficial NEAR envlog macro to log every method call inside `near_bindgen`
 """
 
 [lib]
