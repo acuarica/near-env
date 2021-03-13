@@ -17,6 +17,7 @@ pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
             &input.sig,
             input.block.deref_mut(),
             !should_skip_args && !skip_args(&input.attrs),
+            is_payable(&input.attrs),
         );
         (quote! { #input }).into()
     } else if let Ok(mut input) = syn::parse::<ItemImpl>(item) {
@@ -27,6 +28,7 @@ pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
                         &method.sig,
                         &mut method.block,
                         !should_skip_args && !skip_args(&method.attrs),
+                        is_payable(&method.attrs),
                     );
                 }
             }
@@ -50,13 +52,12 @@ pub fn near_envlog_skip_args(_attr: TokenStream, item: TokenStream) -> TokenStre
     item
 }
 
-fn make_loggable_fn(sig: &Signature, block: &mut Block, with_args: bool) {
-    let mut log_str = sig.ident.to_string();
-
+fn make_loggable_fn(sig: &Signature, block: &mut Block, with_args: bool, is_payable: bool) {
     let mut is_mut = false;
-    let mut args = Vec::new();
+    let mut args = ArgsFormatter::new();
+
     if with_args {
-        let mut log_args = String::new();
+        write!(args.fmt, "(").unwrap();
         for arg in sig.inputs.iter() {
             match arg {
                 FnArg::Receiver(r) => {
@@ -65,51 +66,67 @@ fn make_loggable_fn(sig: &Signature, block: &mut Block, with_args: bool) {
                 FnArg::Typed(pat_type) => {
                     if let Pat::Ident(pat_ident) = pat_type.pat.deref() {
                         let arg_ident = &pat_ident.ident;
-                        args.push(arg_ident);
-                        if !log_args.is_empty() {
-                            write!(log_args, ", ").unwrap();
-                        }
-                        write!(log_args, "{}: {{}}", arg_ident.to_string()).unwrap();
+                        args.push(arg_ident.to_string(), quote! {#arg_ident});
                     }
                 }
             }
         }
-        write!(log_str, "({})", log_args).unwrap();
+        write!(args.fmt, ")").unwrap();
     }
 
-    let env_log = quote! { near_sdk::env::log };
-    let env_pred = quote! { near_sdk::env::predecessor_account_id };
+    if is_mut {
+        args.push("pred", quote! { ::near_sdk::env::predecessor_account_id() });
+    }
+    if is_payable {
+        args.push("deposit", quote! { ::near_sdk::env::attached_deposit() });
+    }
 
-    let log_stmt = if is_mut {
-        write!(log_str, " pred: {{}}").unwrap();
-        if args.is_empty() {
-            quote! {
-                #env_log(format!(#log_str, #env_pred()).as_bytes());
-            }
-        } else {
-            quote! {
-                #env_log(format!(#log_str, #(#args),*, #env_pred()).as_bytes());
-            }
-        }
-    } else {
-        quote! {
-            #env_log(format!(#log_str, #(#args),*).as_bytes());
-        }
-    };
-
+    let mut log_str = sig.ident.to_string();
+    write!(log_str, "{}", args.fmt).unwrap();
+    let args = args.args;
     *block = syn::parse::<Block>(TokenStream::from(quote! {
         {
-            #log_stmt
+            ::near_sdk::env::log(format!(#log_str, #(#args),*).as_bytes());
             #block
         }
     }))
     .unwrap();
 }
 
+struct ArgsFormatter {
+    args: Vec<proc_macro2::TokenStream>,
+    fmt: String,
+}
+
+impl ArgsFormatter {
+    fn new() -> Self {
+        Self {
+            args: Vec::new(),
+            fmt: String::new(),
+        }
+    }
+
+    fn push<S: AsRef<str>>(&mut self, name: S, value: proc_macro2::TokenStream) {
+        if !self.args.is_empty() {
+            write!(self.fmt, ", ").unwrap();
+        }
+        write!(self.fmt, "{}: {{}}", name.as_ref()).unwrap();
+        self.args.push(value);
+    }
+}
+
 fn skip_args(attrs: &Vec<Attribute>) -> bool {
+    has_attr("near_envlog_skip_args", attrs)
+}
+
+fn is_payable(attrs: &Vec<Attribute>) -> bool {
+    has_attr("payable", attrs)
+}
+
+fn has_attr(attr_name: &str, attrs: &Vec<Attribute>) -> bool {
     for attr in attrs {
         let attr_str = attr.path.to_token_stream().to_string();
-        if attr_str.ends_with("near_envlog_skip_args") {
+        if attr_str.ends_with(attr_name) {
             return true;
         }
     }

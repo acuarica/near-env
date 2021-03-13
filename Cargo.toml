@@ -1,6 +1,6 @@
 [package]
 name = "near-env"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Luis Mastrangelo <luismastrangelo@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -18,3 +18,6 @@ proc-macro = true
 syn = {version = "1.0.14", features = ["full", "fold", "visit"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+
+[dev-dependencies]
+near-sdk = "3.0.0-pre.2"
