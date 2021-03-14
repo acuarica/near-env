@@ -8,6 +8,13 @@ use near_sdk::{
 #[near_bindgen]
 pub struct Model {}
 
+#[near_envlog]
+impl Default for Model {
+    fn default() -> Self {
+        Model {}
+    }
+}
+
 #[allow(dead_code)]
 struct NoDisplay {}
 
@@ -17,6 +24,11 @@ struct NoDisplay {}
 #[near_envlog(only_pub)]
 #[near_envlog(skip_args, only_pub)]
 impl Model {
+    #[init]
+    pub fn new() -> Model {
+        Model {}
+    }
+
     pub fn self_fn_no_args(&self) -> u32 {
         1
     }
@@ -90,7 +102,18 @@ fn works() {
     logs.push("free_standing_fn_skip_args");
     free_standing_fn_skip_args(1, 2);
 
-    let mut model = Model {};
+    let ver = env!("CARGO_PKG_VERSION");
+
+    let l = format!("default() v{}", ver);
+    logs.push(l.as_ref());
+    Model::default();
+
+    logs.push("new");
+    logs.push("new()");
+    logs.push("new");
+    let l = format!("new() v{}", ver);
+    logs.push(l.as_str());
+    let mut model = Model::new();
 
     logs.push("self_fn_no_args");
     logs.push("self_fn_no_args()");
@@ -118,23 +141,28 @@ fn works() {
     model.self_fn_two_args(1, 2);
 
     logs.push("mut_self_fn_no_args");
-    logs.push("mut_self_fn_no_args()pred: bob.near");
+    logs.push("mut_self_fn_no_args() pred: bob.near");
     logs.push("mut_self_fn_no_args");
-    logs.push("mut_self_fn_no_args()pred: bob.near, deposit: 0");
+    logs.push("mut_self_fn_no_args() pred: bob.near, deposit: 0");
     logs.push("priv_self");
     logs.push("priv_self(_an_arg: false)");
     model.mut_self_fn_no_args();
 
-    logs.push("mut_self_fn_one_arg(an_arg: true), pred: bob.near");
+    logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
-    logs.push("mut_self_fn_one_arg(an_arg: true), pred: bob.near");
+    logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
-    logs.push("mut_self_fn_one_arg(an_arg: true), pred: bob.near");
+    logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     model.mut_self_fn_one_arg(true);
 
-    for log_line in get_logs() {
+    let env_logs = get_logs();
+    for log_line in &env_logs {
         println!("{}", log_line);
     }
 
-    assert_eq!(logs, get_logs());
+    for i in 0..logs.len() {
+        assert_eq!(logs[i], env_logs[i]);
+    }
+
+    assert_eq!(logs, env_logs);
 }
