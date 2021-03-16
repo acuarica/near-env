@@ -43,8 +43,9 @@ pub fn near_envlog_skip_args(_attr: TokenStream, item: TokenStream) -> TokenStre
 }
 
 fn make_loggable_fn(sig: &Signature, block: &mut Block, attrs: &Vec<Attribute>, skip_args: bool) {
+    let name = sig.ident.to_string();
     let mut is_mut = false;
-    let mut args = ArgsFormatter::new();
+    let mut args = ArgsFormatter::new(&name);
 
     if !skip_args && !has_attr("near_envlog_skip_args", attrs) {
         write!(args.fmt, "(").unwrap();
@@ -70,17 +71,15 @@ fn make_loggable_fn(sig: &Signature, block: &mut Block, attrs: &Vec<Attribute>, 
     if has_attr("payable", attrs) {
         args.push_arg("deposit", quote! { ::near_sdk::env::attached_deposit() });
     }
-    let name = sig.ident.to_string();
     if has_attr("init", attrs) || (name == "default" && sig.inputs.is_empty()) {
         args.push("v", quote! { env!("CARGO_PKG_VERSION") });
     }
 
-    let mut log_str = name;
-    write!(log_str, "{}", args.fmt).unwrap();
+    let fmt = args.fmt;
     let args = args.args;
     *block = syn::parse::<Block>(TokenStream::from(quote! {
         {
-            ::near_sdk::env::log(format!(#log_str, #(#args),*).as_bytes());
+            ::near_sdk::env::log(format!(#fmt, #(#args),*).as_bytes());
             #block
         }
     }))
@@ -93,10 +92,10 @@ struct ArgsFormatter {
 }
 
 impl ArgsFormatter {
-    fn new() -> Self {
+    fn new<S: AsRef<str>>(method_name: S) -> Self {
         Self {
             args: Vec::new(),
-            fmt: String::new(),
+            fmt: method_name.as_ref().to_string(),
         }
     }
 
