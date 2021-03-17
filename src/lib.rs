@@ -4,7 +4,7 @@ use quote::quote;
 use quote::ToTokens;
 use std::fmt::Write;
 use std::ops::Deref;
-use syn::{self, Attribute, Block, FnArg, ImplItem, ImplItemMethod, ItemImpl, Pat, Visibility};
+use syn::{self, Block, FnArg, ImplItem, ImplItemMethod, ItemImpl, Pat, Visibility};
 
 #[proc_macro_attribute]
 pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -57,11 +57,21 @@ pub fn near_envlog_skip_args(_attr: TokenStream, item: TokenStream) -> TokenStre
 }
 
 fn make_loggable_fn(method: &mut ImplItemMethod, skip_args: bool) {
+    let has_attr = |attr_name| {
+        for attr in &method.attrs {
+            let attr_str = attr.path.to_token_stream().to_string();
+            if attr_str.ends_with(attr_name) {
+                return true;
+            }
+        }
+        false
+    };
+
     let name = method.sig.ident.to_string();
     let mut is_mut = false;
     let mut args = ArgsFormatter::new(&name);
 
-    if !skip_args && !has_attr("near_envlog_skip_args", &method.attrs) {
+    if !skip_args && !has_attr("near_envlog_skip_args") {
         write!(args.fmt, "(").unwrap();
         for arg in method.sig.inputs.iter() {
             match arg {
@@ -82,10 +92,10 @@ fn make_loggable_fn(method: &mut ImplItemMethod, skip_args: bool) {
     if is_mut {
         args.push_arg("pred", quote! { ::near_sdk::env::predecessor_account_id() });
     }
-    if has_attr("payable", &method.attrs) {
+    if has_attr("payable") {
         args.push_arg("deposit", quote! { ::near_sdk::env::attached_deposit() });
     }
-    if has_attr("init", &method.attrs) || (name == "default" && method.sig.inputs.is_empty()) {
+    if has_attr("init") || (name == "default" && method.sig.inputs.is_empty()) {
         args.push("v", quote! { env!("CARGO_PKG_VERSION") });
     }
 
@@ -127,15 +137,4 @@ impl ArgsFormatter {
         self.args.push(value);
         write!(self.fmt, "{}{{}}", prefix.as_ref()).unwrap();
     }
-}
-
-fn has_attr(attr_name: &str, attrs: &Vec<Attribute>) -> bool {
-    for attr in attrs {
-        let attr_str = attr.path.to_token_stream().to_string();
-        if attr_str.ends_with(attr_name) {
-            return true;
-        }
-    }
-
-    false
 }
