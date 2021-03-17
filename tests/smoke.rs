@@ -42,10 +42,13 @@ impl Model {
         42
     }
 
-    #[near_envlog_skip_args]
-    #[near_envlog]
     pub fn self_fn_two_args(&self, an_arg: u32, another_arg: u16) -> u32 {
-        2
+        2 + an_arg + another_arg as u32
+    }
+
+    #[near_envlog_skip_args]
+    pub fn self_fn_skip_two_args(&self, an_arg: u32, another_arg: u16) -> u32 {
+        2 + an_arg + another_arg as u32
     }
 
     #[payable]
@@ -55,7 +58,6 @@ impl Model {
         3 + a as u32
     }
 
-    #[near_envlog]
     pub fn mut_self_fn_one_arg(&mut self, an_arg: bool) -> u32 {
         4
     }
@@ -63,22 +65,6 @@ impl Model {
     fn priv_self(&self, _an_arg: bool) -> u32 {
         4
     }
-}
-
-#[near_envlog]
-fn fn_no_args() -> u32 {
-    42
-}
-
-#[near_envlog]
-fn wrapped_function(first_param: u32, snd_param: u16) -> u32 {
-    first_param + snd_param as u32
-}
-
-#[near_envlog]
-#[near_envlog_skip_args]
-fn free_standing_fn_skip_args(first_param: u32, snd_param: u16) -> u32 {
-    first_param + snd_param as u32
 }
 
 #[test]
@@ -90,17 +76,6 @@ fn works() {
     testing_env!(context);
 
     let mut logs = Vec::new();
-
-    logs.push("fn_no_args()");
-    fn_no_args();
-
-    logs.push("wrapped_function(first_param: 42, snd_param: 8)");
-    let res = wrapped_function(42, 8);
-    println!("res: {}", res);
-    assert_eq!(res, 50);
-
-    logs.push("free_standing_fn_skip_args");
-    free_standing_fn_skip_args(1, 2);
 
     let ver = env!("CARGO_PKG_VERSION");
 
@@ -133,11 +108,10 @@ fn works() {
     logs.push("self_fn_skip_args");
     model.self_fn_skip_args(NoDisplay {});
 
+    logs.push("self_fn_two_args");
     logs.push("self_fn_two_args(an_arg: 1, another_arg: 2)");
     logs.push("self_fn_two_args");
-    logs.push("self_fn_two_args");
-    logs.push("self_fn_two_args");
-    logs.push("self_fn_two_args");
+    logs.push("self_fn_two_args(an_arg: 1, another_arg: 2)");
     model.self_fn_two_args(1, 2);
 
     logs.push("mut_self_fn_no_args");
@@ -148,7 +122,7 @@ fn works() {
     logs.push("priv_self(_an_arg: false)");
     model.mut_self_fn_no_args();
 
-    logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
+    // logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
     logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
