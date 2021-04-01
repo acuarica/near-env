@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use near_env::{near_envlog, near_envlog_skip_args};
 use near_sdk::{
     env, near_bindgen,
@@ -67,6 +69,18 @@ impl Model {
     }
 }
 
+trait ModelTrait {
+    fn trait_method(&self, arg: u32) -> u32;
+}
+
+#[near_envlog]
+#[near_envlog(skip_args, only_pub)]
+impl ModelTrait for Model {
+    fn trait_method(&self, arg: u32) -> u32 {
+        arg
+    }
+}
+
 #[test]
 fn works() {
     let context = VMContextBuilder::new()
@@ -122,12 +136,15 @@ fn works() {
     logs.push("priv_self(_an_arg: false)");
     model.mut_self_fn_no_args();
 
-    // logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
     logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     logs.push("mut_self_fn_one_arg");
     logs.push("mut_self_fn_one_arg(an_arg: true) pred: bob.near");
     model.mut_self_fn_one_arg(true);
+
+    logs.push("trait_method");
+    logs.push("trait_method(arg: 2)");
+    model.trait_method(2);
 
     let env_logs = get_logs();
     for log_line in &env_logs {

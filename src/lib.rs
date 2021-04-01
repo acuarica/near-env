@@ -20,6 +20,7 @@ pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Visibility::Public(_) => true,
                         _ => false,
                     }
+                    || input.trait_.is_some()
                 {
                     make_loggable_fn(method, skip_args);
                 }
