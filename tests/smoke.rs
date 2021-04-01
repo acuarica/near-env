@@ -70,7 +70,7 @@ impl Model {
 #[test]
 fn works() {
     let context = VMContextBuilder::new()
-        .signer_account_id("bob_near".to_string())
+        .signer_account_id("bob_near".try_into().unwrap())
         .is_view(false)
         .build();
     testing_env!(context);
