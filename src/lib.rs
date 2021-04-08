@@ -1,10 +1,93 @@
 use proc_macro::{TokenStream, TokenTree};
 use proc_macro2::Span;
+use proc_macro2::TokenTree::Literal;
 use quote::quote;
 use quote::ToTokens;
 use std::fmt::Write;
 use std::ops::Deref;
-use syn::{self, Block, FnArg, ImplItem, ImplItemMethod, ItemImpl, Pat, Visibility};
+use syn::{
+    self, Attribute, Block, FnArg, ImplItem, ImplItemMethod, ItemEnum, ItemImpl, Pat, Visibility,
+};
+
+fn is_public(method: &ImplItemMethod) -> bool {
+    match method.vis {
+        Visibility::Public(_) => true,
+        _ => false,
+    }
+}
+
+#[proc_macro_derive(PanicMessage, attributes(panic_msg))]
+pub fn near_panic(item: TokenStream) -> TokenStream {
+    if let Ok(input) = syn::parse::<ItemEnum>(item) {
+        let name = &input.ident;
+
+        let mut cases = Vec::new();
+        for var in &input.variants {
+            let var_name = &var.ident;
+
+            let mut pattern = Vec::new();
+            let msg_format = if let Some(msg) = get_panic_msg(&var.attrs) {
+                msg
+            } else {
+                return TokenStream::from(
+                    syn::Error::new(Span::call_site(), "`panic_msg` missing on `enum` variant")
+                        .to_compile_error(),
+                );
+            };
+            for field in &var.fields {
+                if let Some(field_name) = &field.ident {
+                    pattern.push(quote! { #field_name });
+                }
+            }
+            cases.push(quote! {
+                #name::#var_name { #(#pattern),* } => format!(#msg_format, #(#pattern),* )
+            });
+        }
+
+        (quote! {
+            impl #name {
+                fn msg(&self) -> String {
+                    match self {
+                        #(#cases),*
+                    }
+                }
+
+                fn panic(self) -> ! {
+                    #[derive(Serialize)]
+                    #[serde(crate = "::near_sdk::serde")]
+                    struct PanicResponse {
+                        #[serde(flatten)]
+                        panic: #name,
+                        msg: String,
+                    }
+
+                    ::near_sdk::env::panic(
+                        ::near_sdk::serde_json::to_string(&PanicResponse {
+                            msg: self.msg(),
+                            panic: self,
+                        })
+                        .unwrap()
+                        .as_bytes(),
+                    )
+                }
+            }
+        })
+        .into()
+    } else {
+        TokenStream::from(
+            syn::Error::new(
+                Span::call_site(),
+                "`near_panic` can only be used on `enum` sections",
+            )
+            .to_compile_error(),
+        )
+    }
+}
+
+#[proc_macro_attribute]
+pub fn panic_msg(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
 #[proc_macro_attribute]
 pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -15,13 +98,7 @@ pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         for impl_item in input.items.iter_mut() {
             if let ImplItem::Method(method) = impl_item {
-                if !only_pub
-                    || match method.vis {
-                        Visibility::Public(_) => true,
-                        _ => false,
-                    }
-                    || input.trait_.is_some()
-                {
+                if !only_pub || is_public(method) || input.trait_.is_some() {
                     make_loggable_fn(method, skip_args);
                 }
             }
@@ -138,4 +215,23 @@ impl ArgsFormatter {
         self.args.push(value);
         write!(self.fmt, "{}{{}}", prefix.as_ref()).unwrap();
     }
+}
+
+fn get_panic_msg(attrs: &Vec<Attribute>) -> Option<String> {
+    for attr in attrs {
+        if attr.path.is_ident("panic_msg") {
+            for token in attr.tokens.clone() {
+                if let Literal(lit) = token {
+                    if let Some(line) = lit
+                        .to_string()
+                        .strip_prefix('"')
+                        .and_then(|s| s.strip_suffix('"'))
+                    {
+                        return Some(line.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }

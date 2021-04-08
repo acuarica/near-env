@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use near_env::{near_envlog, near_envlog_skip_args};
 use near_sdk::{
-    env, near_bindgen,
+    near_bindgen,
     test_utils::{get_logs, VMContextBuilder},
     testing_env, MockedBlockchain,
 };
@@ -56,7 +56,7 @@ impl Model {
     #[payable]
     pub fn mut_self_fn_no_args(&mut self) -> u32 {
         self.priv_self(false);
-        let a = env::attached_deposit();
+        let a = near_sdk::env::attached_deposit();
         3 + a as u32
     }
 
@@ -82,7 +82,7 @@ impl ModelTrait for Model {
 }
 
 #[test]
-fn works() {
+fn test_logs() {
     let context = VMContextBuilder::new()
         .signer_account_id("bob_near".try_into().unwrap())
         .is_view(false)
