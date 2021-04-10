@@ -1,16 +1,17 @@
-use std::convert::TryInto;
+#![deny(warnings)]
 
-use near_env::{near_envlog, near_envlog_skip_args};
+use near_env::{near_envlog_skip_args, near_log};
 use near_sdk::{
     near_bindgen,
     test_utils::{get_logs, VMContextBuilder},
     testing_env, MockedBlockchain,
 };
+use std::convert::TryInto;
 
 #[near_bindgen]
 pub struct Model {}
 
-#[near_envlog]
+#[near_log]
 impl Default for Model {
     fn default() -> Self {
         Model {}
@@ -20,11 +21,11 @@ impl Default for Model {
 #[allow(dead_code)]
 struct NoDisplay {}
 
-#[near_envlog]
+#[near_log]
 #[near_bindgen]
-#[near_envlog(skip_args)]
-#[near_envlog(only_pub)]
-#[near_envlog(skip_args, only_pub)]
+#[near_log(skip_args)]
+#[near_log(only_pub)]
+#[near_log(skip_args, only_pub)]
 impl Model {
     #[init]
     pub fn new() -> Model {
@@ -73,8 +74,8 @@ trait ModelTrait {
     fn trait_method(&self, arg: u32) -> u32;
 }
 
-#[near_envlog]
-#[near_envlog(skip_args, only_pub)]
+#[near_log]
+#[near_log(skip_args, only_pub)]
 impl ModelTrait for Model {
     fn trait_method(&self, arg: u32) -> u32 {
         arg

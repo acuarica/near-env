@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 use proc_macro::{TokenStream, TokenTree};
 use proc_macro2::Span;
 use proc_macro2::TokenTree::Literal;
@@ -6,7 +8,8 @@ use quote::ToTokens;
 use std::fmt::Write;
 use std::ops::Deref;
 use syn::{
-    self, Attribute, Block, FnArg, ImplItem, ImplItemMethod, ItemEnum, ItemImpl, Pat, Visibility,
+    self, Attribute, Block, Error, FnArg, ImplItem, ImplItemMethod, ItemEnum, ItemImpl, ItemTrait,
+    Pat, Visibility,
 };
 
 fn is_public(method: &ImplItemMethod) -> bool {
@@ -29,10 +32,7 @@ pub fn near_panic(item: TokenStream) -> TokenStream {
             let msg_format = if let Some(msg) = get_panic_msg(&var.attrs) {
                 msg
             } else {
-                return TokenStream::from(
-                    syn::Error::new(Span::call_site(), "`panic_msg` missing on `enum` variant")
-                        .to_compile_error(),
-                );
+                return compile_error("`panic_msg` missing on `enum` variant");
             };
             for field in &var.fields {
                 if let Some(field_name) = &field.ident {
@@ -74,13 +74,7 @@ pub fn near_panic(item: TokenStream) -> TokenStream {
         })
         .into()
     } else {
-        TokenStream::from(
-            syn::Error::new(
-                Span::call_site(),
-                "`near_panic` can only be used on `enum` sections",
-            )
-            .to_compile_error(),
-        )
+        compile_error("`near_panic` can only be used on `enum` sections")
     }
 }
 
@@ -90,7 +84,7 @@ pub fn panic_msg(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn near_log(attr: TokenStream, item: TokenStream) -> TokenStream {
     if let Ok(mut input) = syn::parse::<ItemImpl>(item) {
         let attr_args = attr.into_iter().collect::<Vec<TokenTree>>();
         let skip_args = contains_attr_arg(&attr_args, "skip_args");
@@ -105,13 +99,7 @@ pub fn near_envlog(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
         (quote! { #input }).into()
     } else {
-        TokenStream::from(
-            syn::Error::new(
-                Span::call_site(),
-                "`near_envlog` can only be used on `impl` sections",
-            )
-            .to_compile_error(),
-        )
+        compile_error("`near_envlog` can only be used on `impl` sections")
     }
 }
 
@@ -134,16 +122,21 @@ pub fn near_envlog_skip_args(_attr: TokenStream, item: TokenStream) -> TokenStre
     item
 }
 
-fn make_loggable_fn(method: &mut ImplItemMethod, skip_args: bool) {
-    let has_attr = |attr_name| {
-        for attr in &method.attrs {
-            let attr_str = attr.path.to_token_stream().to_string();
-            if attr_str.ends_with(attr_name) {
-                return true;
-            }
+fn has_attr(attrs: &Vec<Attribute>, attr_name: &str) -> Option<usize> {
+    let mut i = 0;
+    for attr in attrs {
+        let attr_str = attr.path.to_token_stream().to_string();
+        if attr_str.ends_with(attr_name) {
+            return Some(i);
         }
-        false
-    };
+
+        i += 1;
+    }
+    None
+}
+
+fn make_loggable_fn(method: &mut ImplItemMethod, skip_args: bool) {
+    let has_attr = |attr_name| crate::has_attr(&method.attrs, attr_name).is_some();
 
     let name = method.sig.ident.to_string();
     let mut is_mut = false;
@@ -234,4 +227,27 @@ fn get_panic_msg(attrs: &Vec<Attribute>) -> Option<String> {
         }
     }
     None
+}
+
+#[proc_macro_attribute]
+pub fn near_ext(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    if let Ok(input) = syn::parse::<ItemTrait>(item) {
+        if let Some(i) = has_attr(&input.attrs, "ext_contract") {
+            let mut dup = input.clone();
+            dup.attrs.remove(i);
+            (quote! {
+               #input
+               #dup
+            })
+            .into()
+        } else {
+            compile_error("`near_ext` must be used before `ext_contract`")
+        }
+    } else {
+        compile_error("`near_ext` can only be used on `trait` sections")
+    }
+}
+
+fn compile_error(message: &str) -> TokenStream {
+    TokenStream::from(Error::new(Span::call_site(), message).to_compile_error())
 }
