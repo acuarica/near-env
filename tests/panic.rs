@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 use near_env::PanicMessage;
 use near_sdk::{serde::Serialize, test_utils::VMContextBuilder, testing_env, MockedBlockchain};
 
