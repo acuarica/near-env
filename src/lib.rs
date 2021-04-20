@@ -46,7 +46,7 @@ pub fn near_panic(item: TokenStream) -> TokenStream {
 
         (quote! {
             impl #name {
-                fn msg(&self) -> String {
+                pub fn msg(&self) -> String {
                     match self {
                         #(#cases),*
                     }
